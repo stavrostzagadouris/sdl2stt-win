@@ -1,0 +1,14 @@
+{
+  "stt_url": "http://127.0.0.1:5000/v1/audio/transcriptions",
+  "stt_peer": "",
+  "hotkey": "ctrl+space",
+  "mode": "hold",
+  "gate": 0.02,
+  "min_loud_windows": 3,
+  "sample_rate": 16000,
+  "channels": 1,
+  "bar_width": 280,
+  "bar_height": 48,
+  "bar_margin_bottom": 24,
+  "play_sound_cues": true
+}

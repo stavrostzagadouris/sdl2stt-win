@@ -1,5 +1,12 @@
 # sdl2stt-win
 
+This one is coded by Gemini 3.8 Flash medium. Works on windows and is pretty slick.
+
+NOTE that there is no security build into cleanTTS or these companions, they run unencrypted to an http endpoint. The security is at the network layer.. for example, I have mine go through my tailnet, which itself is secure and encrypted, therefore bundling the data safely.
+
+
+
+
 Push-to-talk voice input for **Windows**, designed to pair with [cleanTTS](https://github.com/stavrostzagadouris/cleanTTS).
 
 Hold **Ctrl+Space**, speak, release — the transcribed text is typed directly into whatever window/field currently has focus.

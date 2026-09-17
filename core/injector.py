@@ -181,10 +181,73 @@ def _send_paste():
         logger.warning(f"SendInput (paste) failed with error code {err}. The target window may be elevated (UIPI).")
 
 
+def _inject_via_clipboard(text):
+    """Inject text using clipboard paste (Ctrl+V). Returns True on success."""
+    old_clip = _get_clipboard_text()
+
+    if not _set_clipboard_text(text):
+        return False
+
+    _send_paste()
+
+    # Wait for the paste to be consumed by the target app before restoring
+    time.sleep(0.1)
+
+    # Restore whatever was on the clipboard before
+    if old_clip is not None:
+        _set_clipboard_text(old_clip)
+    else:
+        if _open_clipboard_with_retry():
+            user32.EmptyClipboard()
+            user32.CloseClipboard()
+    return True
+
+
+def _inject_via_sendkeys(text):
+    """Inject text character-by-character using SendInput with KEYEVENTF_UNICODE."""
+    inputs = []
+    utf16_bytes = text.encode("utf-16le")
+    words = [
+        utf16_bytes[i] | (utf16_bytes[i + 1] << 8)
+        for i in range(0, len(utf16_bytes), 2)
+    ]
+
+    for code_unit in words:
+        if code_unit == 0x0A:  # '\n' -> enter key
+            down = INPUT(type=INPUT_KEYBOARD)
+            down.union.ki = KEYBDINPUT(wVk=0x0D, wScan=0, dwFlags=0, time=0, dwExtraInfo=None)
+            up = INPUT(type=INPUT_KEYBOARD)
+            up.union.ki = KEYBDINPUT(wVk=0x0D, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=None)
+        elif code_unit == 0x0D:  # '\r' -> skip
+            continue
+        else:
+            down = INPUT(type=INPUT_KEYBOARD)
+            down.union.ki = KEYBDINPUT(
+                wVk=0, wScan=code_unit, dwFlags=KEYEVENTF_UNICODE, time=0, dwExtraInfo=None,
+            )
+            up = INPUT(type=INPUT_KEYBOARD)
+            up.union.ki = KEYBDINPUT(
+                wVk=0, wScan=code_unit, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time=0, dwExtraInfo=None,
+            )
+        inputs.extend([down, up])
+
+    if inputs:
+        chunk_size = 64
+        for i in range(0, len(inputs), chunk_size):
+            chunk = inputs[i : i + chunk_size]
+            arr = (INPUT * len(chunk))(*chunk)
+            ret = user32.SendInput(len(chunk), arr, ctypes.sizeof(INPUT))
+            if ret == 0:
+                err = ctypes.GetLastError()
+                logger.warning(f"SendInput failed with error code {err}. The target window may be elevated (UIPI).")
+            time.sleep(0.001)
+
+
 def inject_text(text: str):
     """
-    Injects text into the focused window via clipboard paste (Ctrl+V).
-    Saves and restores the user's clipboard contents automatically.
+    Injects text into the focused window.
+    Tries instant clipboard paste first; falls back to character-by-character
+    SendInput if the clipboard is unavailable (e.g. locked by RDP).
     """
     if not text:
         return
@@ -199,23 +262,9 @@ def inject_text(text: str):
     _release_modifiers()
     time.sleep(0.05)
 
-    # Save current clipboard, paste, then restore
-    old_clip = _get_clipboard_text()
-
-    if not _set_clipboard_text(text):
-        logger.error("Failed to write text to clipboard for injection")
+    if _inject_via_clipboard(text):
         return
 
-    _send_paste()
-
-    # Wait for the paste to be consumed by the target app before restoring
-    time.sleep(0.1)
-
-    # Restore whatever was on the clipboard before
-    if old_clip is not None:
-        _set_clipboard_text(old_clip)
-    else:
-        # Clear clipboard back to empty
-        if _open_clipboard_with_retry():
-            user32.EmptyClipboard()
-            user32.CloseClipboard()
+    # Clipboard unavailable — fall back to typing it out
+    logger.info("Clipboard unavailable, falling back to SendInput injection")
+    _inject_via_sendkeys(text)

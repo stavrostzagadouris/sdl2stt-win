@@ -54,6 +54,37 @@ class INPUT(ctypes.Structure):
 
 user32 = ctypes.windll.user32
 
+# Virtual key codes for modifier keys
+VK_LCONTROL = 0xA2
+VK_RCONTROL = 0xA3
+VK_LSHIFT = 0xA0
+VK_RSHIFT = 0xA1
+VK_LMENU = 0xA4   # Left Alt
+VK_RMENU = 0xA5   # Right Alt
+VK_LWIN = 0x5B
+VK_RWIN = 0x5C
+
+_MODIFIER_VKS = [
+    VK_LCONTROL, VK_RCONTROL,
+    VK_LSHIFT, VK_RSHIFT,
+    VK_LMENU, VK_RMENU,
+    VK_LWIN, VK_RWIN,
+]
+
+
+def _release_modifiers():
+    """Send KEY_UP for every modifier key to clear stuck-down state."""
+    releases = []
+    for vk in _MODIFIER_VKS:
+        up = INPUT(type=INPUT_KEYBOARD)
+        up.union.ki = KEYBDINPUT(
+            wVk=vk, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=None
+        )
+        releases.append(up)
+    if releases:
+        arr = (INPUT * len(releases))(*releases)
+        user32.SendInput(len(releases), arr, ctypes.sizeof(INPUT))
+
 
 def inject_text(text: str, char_delay: float = 0.001):
     """
@@ -68,8 +99,14 @@ def inject_text(text: str, char_delay: float = 0.001):
     if not text:
         return
 
-    # Small pause to allow key release state to settle
-    time.sleep(0.02)
+    # Force-release all modifier keys before injecting.  In push-to-talk
+    # mode Ctrl (and possibly others) is still "down" in the OS input queue
+    # when this runs, so every injected char would be interpreted as a
+    # shortcut (Ctrl+H, Ctrl+G …) instead of text.  This is especially bad
+    # over RDP where there's extra latency between physical key-up and the
+    # remote OS registering it.
+    _release_modifiers()
+    time.sleep(0.05)  # let the OS / RDP input pipeline settle
 
     inputs = []
     # Encode to UTF-16 LE to correctly split into 16-bit code units (handling surrogate pairs)

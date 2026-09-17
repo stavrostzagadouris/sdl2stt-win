@@ -37,10 +37,16 @@ class HotkeyListener:
 
         is_down = (e.event_type == keyboard.KEY_DOWN)
 
+        # Some key events (e.g. RDP virtual keys) have name=None — ignore them
+        if e.name is None:
+            return
+
+        name = e.name.lower()
+
         # Track ctrl and space keys
-        if "ctrl" in e.name.lower():
+        if "ctrl" in name:
             self._ctrl_down = is_down
-        elif e.name.lower() == "space":
+        elif name == "space":
             self._space_down = is_down
 
         hotkey_active = self._ctrl_down and self._space_down
@@ -66,7 +72,7 @@ class HotkeyListener:
 
         elif self.mode == "toggle":
             # Toggle mode: trigger on key down of space while ctrl is pressed
-            if is_down and e.name.lower() == "space" and self._ctrl_down:
+            if is_down and name == "space" and self._ctrl_down:
                 logger.info("Hotkey toggle triggered (Ctrl+Space)")
                 if self.on_toggle:
                     threading.Thread(target=self.on_toggle, daemon=True).start()

@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger('sdl2stt')
 
 INPUT_KEYBOARD = 1
+KEYEVENTF_UNICODE = 0x0004
 KEYEVENTF_KEYUP = 0x0002
 VK_CONTROL = 0x11
 VK_V = 0x56

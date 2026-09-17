@@ -100,10 +100,25 @@ def _release_modifiers():
         user32.SendInput(len(releases), arr, ctypes.sizeof(INPUT))
 
 
+def _open_clipboard_with_retry(max_attempts=10, delay=0.05):
+    """Try to open the clipboard, retrying on failure.
+
+    RDP's rdpclip.exe frequently holds the clipboard locked during sync,
+    so a single attempt often fails.  Retrying with a short backoff is the
+    standard workaround.
+    """
+    for attempt in range(max_attempts):
+        if user32.OpenClipboard(0):
+            return True
+        time.sleep(delay)
+    logger.warning("Could not open clipboard after %d attempts", max_attempts)
+    return False
+
+
 def _get_clipboard_text():
     """Read the current clipboard text, or None if empty/unavailable."""
     text = None
-    if not user32.OpenClipboard(0):
+    if not _open_clipboard_with_retry():
         return None
     try:
         handle = user32.GetClipboardData(CF_UNICODETEXT)
@@ -122,7 +137,7 @@ def _get_clipboard_text():
 def _set_clipboard_text(text):
     """Write text to the clipboard. Returns True on success."""
     encoded = text.encode("utf-16-le") + b"\x00\x00"
-    if not user32.OpenClipboard(0):
+    if not _open_clipboard_with_retry():
         return False
     try:
         user32.EmptyClipboard()
@@ -201,6 +216,6 @@ def inject_text(text: str):
         _set_clipboard_text(old_clip)
     else:
         # Clear clipboard back to empty
-        if user32.OpenClipboard(0):
+        if _open_clipboard_with_retry():
             user32.EmptyClipboard()
             user32.CloseClipboard()

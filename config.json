@@ -10,5 +10,5 @@
   "bar_width": 280,
   "bar_height": 48,
   "bar_margin_bottom": 24,
-  "play_sound_cues": true
+  "play_sound_cues": false
 }

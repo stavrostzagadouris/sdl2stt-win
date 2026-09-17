@@ -75,7 +75,7 @@ def load_config():
         "min_loud_windows": 3,
         "sample_rate": 16000,
         "channels": 1,
-        "play_sound_cues": True,
+        "play_sound_cues": False,
     }
     if os.path.exists(CONFIG_FILE):
         try:

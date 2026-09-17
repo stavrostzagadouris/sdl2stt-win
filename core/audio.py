@@ -10,6 +10,66 @@ import numpy as np
 import sounddevice as sd
 
 
+def choose_microphone():
+    """
+    Display available input devices and prompt the user to select one.
+    Returns the sounddevice device index (int) or None to use the system default.
+    """
+    devices = sd.query_devices()
+    input_devices = []
+    for i, dev in enumerate(devices):
+        if dev["max_input_channels"] > 0:
+            input_devices.append((i, dev))
+
+    if not input_devices:
+        print("No input devices found — using system default.")
+        return None
+
+    # Find the current default so we can mark it
+    try:
+        default_input = sd.default.device[0]
+        if default_input is None or default_input < 0:
+            default_input = sd.query_devices(kind="input")["index"]
+    except Exception:
+        default_input = None
+
+    print("\n──────────────────────────────────────")
+    print("  Available microphones")
+    print("──────────────────────────────────────")
+    for menu_num, (dev_idx, dev) in enumerate(input_devices, start=1):
+        marker = " *" if dev_idx == default_input else ""
+        label = dev["name"]
+        ch = dev["max_input_channels"]
+        rate = int(dev["default_samplerate"])
+        print(f"  {menu_num}) {label}  ({ch}ch, {rate} Hz){marker}")
+    print("──────────────────────────────────────")
+    if default_input is not None:
+        print("  * = current system default")
+    print(f"  Press Enter for default, or type 1–{len(input_devices)}")
+
+    while True:
+        try:
+            choice = input("\n  Select microphone: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Using system default.")
+            return None
+
+        if choice == "":
+            print("  → Using system default.\n")
+            return None
+
+        try:
+            num = int(choice)
+            if 1 <= num <= len(input_devices):
+                dev_idx, dev = input_devices[num - 1]
+                print(f"  → Selected: {dev['name']}\n")
+                return dev_idx
+        except ValueError:
+            pass
+
+        print(f"  Invalid choice. Enter 1–{len(input_devices)} or press Enter for default.")
+
+
 class AudioRecorder:
     def __init__(self, sample_rate=16000, channels=1, device=None):
         self.sample_rate = sample_rate

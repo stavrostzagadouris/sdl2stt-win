@@ -19,7 +19,7 @@ import threading
 import time
 import winsound
 
-from core.audio import AudioRecorder
+from core.audio import AudioRecorder, choose_microphone
 from core.hotkey import HotkeyListener
 from core.injector import inject_text
 from core.ipc import IPCServer, send_command
@@ -105,6 +105,7 @@ class TalkDaemon:
         self.recorder = AudioRecorder(
             sample_rate=config.get("sample_rate", 16000),
             channels=config.get("channels", 1),
+            device=config.get("device"),
         )
         self.visualizer = VisualizerBar(get_level_fn=self.recorder.get_peak_level)
         self.stt_client = STTClient(
@@ -251,6 +252,14 @@ def main():
 
     if cmd in ("daemon", "run"):
         cfg = load_config()
+
+        # Interactive mic selection (skipped when stdin is not a terminal,
+        # e.g. launched via run_background.vbs or CREATE_NO_WINDOW)
+        if sys.stdin is not None and sys.stdin.isatty():
+            device = choose_microphone()
+            if device is not None:
+                cfg["device"] = device
+
         daemon = TalkDaemon(cfg)
         daemon.run()
     elif cmd in ("start", "stop", "toggle", "status", "exit"):

@@ -2,10 +2,10 @@
 Noise gate evaluation for sdl2stt-win.
 Directly ports the proven RMS energy gate from the Linux talk orchestrator.
 """
-import array
 import io
 import math
 import wave
+import numpy as np
 
 
 def evaluate_audio_gate(wav_bytes: bytes, threshold: float = 0.02, min_loud_windows: int = 3):
@@ -27,25 +27,24 @@ def evaluate_audio_gate(wav_bytes: bytes, threshold: float = 0.02, min_loud_wind
             num_frames = wf.getnframes()
             if num_frames == 0:
                 return 0.0, 0, False
-
+            
+            sample_rate = wf.getframerate()
             raw_bytes = wf.readframes(num_frames)
-            samples = array.array("h")
-            samples.frombytes(raw_bytes)
 
-        if not samples:
+        if not raw_bytes:
             return 0.0, 0, False
 
-        win_size = 320  # 20ms windows at 16kHz
-        loud_count = 0
-        peak_rms = 0.0
-
-        for i in range(0, len(samples) - win_size + 1, win_size):
-            seg = samples[i : i + win_size]
-            rms = math.sqrt(sum(float(x) * x for x in seg) / win_size) / 32768.0
-            if rms > peak_rms:
-                peak_rms = rms
-            if rms > threshold:
-                loud_count += 1
+        samples = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32)
+        win_size = int(sample_rate * 0.02)
+        n_windows = len(samples) // win_size
+        
+        if n_windows == 0:
+            return 0.0, 0, False
+            
+        windows = samples[:n_windows * win_size].reshape(n_windows, win_size)
+        rms_values = np.sqrt(np.mean(windows ** 2, axis=1)) / 32768.0
+        peak_rms = float(np.max(rms_values))
+        loud_count = int(np.sum(rms_values > threshold))
 
         passed = loud_count >= min_loud_windows
         return peak_rms, loud_count, passed

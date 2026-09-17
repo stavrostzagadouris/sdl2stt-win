@@ -5,12 +5,23 @@ Uses 64-bit Win32 prototypes and WS_EX_NOACTIVATE & WS_EX_TOPMOST so keyboard fo
 """
 import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+import sys
 import ctypes
 from ctypes import wintypes
+import logging
 import math
 import threading
 import time
 import pygame
+
+if sys.platform == 'win32':
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-monitor DPI aware
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 # cleanTTS Color Palette
 C_BG = (23, 26, 33)         # #171a21
@@ -103,11 +114,14 @@ def get_current_monitor_work_area():
 
 
 class VisualizerBar:
-    def __init__(self, get_level_fn):
+    def __init__(self, get_level_fn, bar_width=BAR_W, bar_height=BAR_H, bar_margin_bottom=BAR_MARG):
         """
         get_level_fn: callback function returning normalized mic peak level [0.0, 1.0]
         """
         self.get_level_fn = get_level_fn
+        self.bar_width = bar_width
+        self.bar_height = bar_height
+        self.bar_margin_bottom = bar_margin_bottom
         self._visible = False
         self._running = False
         self._thread = None
@@ -135,16 +149,16 @@ class VisualizerBar:
 
         left, top, right, bottom = get_current_monitor_work_area()
         mon_w = right - left
-        x = left + (mon_w - BAR_W) // 2
-        y = bottom - BAR_H - BAR_MARG
+        x = left + (mon_w - self.bar_width) // 2
+        y = bottom - self.bar_height - self.bar_margin_bottom
 
         user32.SetWindowPos(
             self._hwnd,
             HWND_TOPMOST,
             x,
             y,
-            BAR_W,
-            BAR_H,
+            self.bar_width,
+            self.bar_height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW,
         )
         user32.ShowWindow(self._hwnd, SW_SHOWNOACTIVATE)
@@ -167,11 +181,11 @@ class VisualizerBar:
         self._screen.fill(C_BG)
 
         # Border
-        pygame.draw.rect(self._screen, C_BORDER, (0, 0, BAR_W, BAR_H), width=1)
+        pygame.draw.rect(self._screen, C_BORDER, (0, 0, self.bar_width, self.bar_height), width=1)
 
         # Left active dot (10x10)
         dot_size = 10
-        dot_y = (BAR_H - dot_size) // 2
+        dot_y = (self.bar_height - dot_size) // 2
         pygame.draw.rect(self._screen, C_LIT, (16, dot_y, dot_size, dot_size))
 
         # 16 level bars
@@ -179,7 +193,7 @@ class VisualizerBar:
         bar_w = 9
         bar_step = 12
         bar_h = 26
-        bar_y = (BAR_H - bar_h) // 2
+        bar_y = (self.bar_height - bar_h) // 2
 
         for b in range(NBARS):
             color = C_LIT if b < lit_bars else C_DIM
@@ -190,12 +204,12 @@ class VisualizerBar:
         # Calculate initial position before creating window
         left, top, right, bottom = get_current_monitor_work_area()
         mon_w = right - left
-        init_x = left + (mon_w - BAR_W) // 2
-        init_y = bottom - BAR_H - BAR_MARG
+        init_x = left + (mon_w - self.bar_width) // 2
+        init_y = bottom - self.bar_height - self.bar_margin_bottom
         os.environ["SDL_VIDEO_WINDOW_POS"] = f"{init_x},{init_y}"
 
         pygame.init()
-        self._screen = pygame.display.set_mode((BAR_W, BAR_H), pygame.NOFRAME)
+        self._screen = pygame.display.set_mode((self.bar_width, self.bar_height), pygame.NOFRAME)
         pygame.display.set_caption("talkwave")
         self._hwnd = pygame.display.get_wm_info()["window"]
 
@@ -213,8 +227,8 @@ class VisualizerBar:
             HWND_TOPMOST,
             init_x,
             init_y,
-            BAR_W,
-            BAR_H,
+            self.bar_width,
+            self.bar_height,
             SWP_NOACTIVATE,
         )
 
@@ -228,30 +242,36 @@ class VisualizerBar:
 
         clock = pygame.time.Clock()
         while self._running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self._running = False
-                    break
+            try:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self._running = False
+                        break
 
-            if self._visible:
-                current_peak = self.get_level_fn()
-                if current_peak > 0.001:
-                    target_lvl = min(1.0, math.sqrt(current_peak * 2.5))
+                if self._visible:
+                    current_peak = self.get_level_fn()
+                    if current_peak > 0.001:
+                        target_lvl = min(1.0, math.sqrt(current_peak * 2.5))
+                    else:
+                        target_lvl = 0.0
+
+                    self._level = (
+                        target_lvl
+                        if target_lvl > self._level
+                        else self._level * 0.75
+                    )
+                    self._level = min(1.0, max(0.0, self._level))
+                    lit_count = int(self._level * NBARS + 0.5)
+
+                    self._draw_frame(lit_count)
+                    pygame.display.flip()
+
+                if self._visible:
+                    clock.tick(30)
                 else:
-                    target_lvl = 0.0
-
-                self._level = (
-                    target_lvl
-                    if target_lvl > self._level
-                    else self._level * 0.75
-                )
-                self._level = min(1.0, max(0.0, self._level))
-                lit_count = int(self._level * NBARS + 0.5)
-
-                self._draw_frame(lit_count)
-                pygame.display.flip()
-
-            clock.tick(30)
+                    clock.tick(5)
+            except Exception as e:
+                logging.getLogger("sdl2stt").error(f"Render loop error: {e}")
 
         try:
             pygame.quit()

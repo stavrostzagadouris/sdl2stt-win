@@ -30,6 +30,23 @@ BAR_MARG = 24
 
 user32 = ctypes.windll.user32
 
+if hasattr(user32, "GetWindowLongPtrW"):
+    user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+    user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+    _get_long = user32.GetWindowLongPtrW
+    _set_long = user32.SetWindowLongPtrW
+else:
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetWindowLongW.restype = wintypes.LONG
+    user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+    user32.SetWindowLongW.restype = wintypes.LONG
+    _get_long = user32.GetWindowLongW
+    _set_long = user32.SetWindowLongW
+
+HWND_TOPMOST = ctypes.c_void_p(-1)
+
 
 class RECT(ctypes.Structure):
     _fields_ = [
@@ -101,9 +118,9 @@ def main():
     hwnd = pygame.display.get_wm_info()["window"]
 
     # Apply Win32 NOACTIVATE & TOPMOST to keep focus in active app
-    cur_ex = user32.GetWindowLongW(hwnd, -20)
-    user32.SetWindowLongW(hwnd, -20, cur_ex | 0x08000000 | 0x00000008 | 0x00000080)
-    user32.SetWindowPos(hwnd, -1, x, y, BAR_W, BAR_H, 0x0010 | 0x0040)
+    cur_ex = _get_long(hwnd, -20)
+    _set_long(hwnd, -20, cur_ex | 0x08000000 | 0x00000008 | 0x00000080)
+    user32.SetWindowPos(hwnd, HWND_TOPMOST, x, y, BAR_W, BAR_H, 0x0010 | 0x0040)
 
     # Initial draw
     draw_frame(screen, 0)

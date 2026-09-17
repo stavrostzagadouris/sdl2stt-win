@@ -5,6 +5,7 @@ Displays the visualizer for 4 seconds with a bouncing level meter.
 import sys
 import time
 import os
+import math
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 from core.visualizer import VisualizerBar
 
@@ -21,7 +22,6 @@ start = time.time()
 while time.time() - start < 4.0:
     t = (time.time() - start) * 4
     # Bouncing sine wave
-    import math
     level = abs(math.sin(t)) * 0.7
     time.sleep(0.03)
 

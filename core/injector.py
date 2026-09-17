@@ -5,6 +5,9 @@ Types transcribed text into the currently focused application/window.
 import ctypes
 from ctypes import wintypes
 import time
+import logging
+
+logger = logging.getLogger('sdl2stt')
 
 INPUT_KEYBOARD = 1
 KEYEVENTF_UNICODE = 0x0004
@@ -61,6 +64,10 @@ def inject_text(text: str, char_delay: float = 0.001):
     if not text:
         return
 
+    text = text.rstrip('\r\n')
+    if not text:
+        return
+
     # Small pause to allow key release state to settle
     time.sleep(0.02)
 
@@ -105,6 +112,9 @@ def inject_text(text: str, char_delay: float = 0.001):
         for i in range(0, len(inputs), chunk_size):
             chunk = inputs[i : i + chunk_size]
             arr = (INPUT * len(chunk))(*chunk)
-            user32.SendInput(len(chunk), arr, ctypes.sizeof(INPUT))
+            ret = user32.SendInput(len(chunk), arr, ctypes.sizeof(INPUT))
+            if ret == 0:
+                err = ctypes.GetLastError()
+                logger.warning(f"SendInput failed with error code {err}. The target window may be elevated (UIPI).")
             if char_delay > 0:
                 time.sleep(char_delay)

@@ -12,7 +12,8 @@ logger = logging.getLogger("sdl2stt")
 class STTClient:
     def __init__(self, endpoint_url: str, peer_name: str = ""):
         self.endpoint_url = endpoint_url
-        self.peer_name = peer_name
+        self.peer_name = peer_name  # Note: currently unused, reserved for future use
+        self.session = requests.Session()
 
     def transcribe(self, wav_bytes: bytes, timeout: float = 20.0) -> str:
         """
@@ -30,7 +31,7 @@ class STTClient:
         }
 
         try:
-            response = requests.post(
+            response = self.session.post(
                 self.endpoint_url,
                 files=files,
                 timeout=(3.0, timeout),  # 3s connect timeout, 20s read timeout

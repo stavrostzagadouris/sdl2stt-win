@@ -45,6 +45,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sdl2stt")
 
+# Route uncaught exceptions to the log so crashes under pythonw aren't silent
+def _handle_exception(exc_type, exc_val, exc_tb):
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_val, exc_tb))
+
+sys.excepthook = _handle_exception
+threading.excepthook = lambda args: _handle_exception(
+    args.exc_type, args.exc_value, args.exc_traceback
+)
+
 
 def load_env():
     """Loads environment variables from .env file if present."""
@@ -107,7 +116,12 @@ class TalkDaemon:
             channels=config.get("channels", 1),
             device=config.get("device"),
         )
-        self.visualizer = VisualizerBar(get_level_fn=self.recorder.get_peak_level)
+        self.visualizer = VisualizerBar(
+            get_level_fn=self.recorder.get_peak_level,
+            bar_width=config.get("bar_width", 280),
+            bar_height=config.get("bar_height", 48),
+            bar_margin_bottom=config.get("bar_margin_bottom", 24),
+        )
         self.stt_client = STTClient(
             endpoint_url=config.get("stt_url"),
             peer_name=config.get("stt_peer", ""),
@@ -121,6 +135,7 @@ class TalkDaemon:
         )
         self.ipc_server = IPCServer(handler_callback=self.handle_ipc)
         self._action_lock = threading.Lock()
+        self._inject_lock = threading.Lock()  # serialize text injections
         self._sound_cues = config.get("play_sound_cues", True)
 
     def play_sound(self, tone: str):
@@ -206,7 +221,8 @@ class TalkDaemon:
         # 3. Text Injection
         if text:
             logger.info(f"Injecting {len(text)} characters into focused window")
-            inject_text(text)
+            with self._inject_lock:
+                inject_text(text)
         else:
             logger.info("Empty transcription received from server")
             self.play_sound("quiet")
@@ -259,6 +275,18 @@ def main():
             device = choose_microphone()
             if device is not None:
                 cfg["device"] = device
+                # Persist selection so background launches use the same mic
+                try:
+                    disk_cfg = {}
+                    if os.path.exists(CONFIG_FILE):
+                        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                            disk_cfg = json.load(f)
+                    disk_cfg["device"] = device
+                    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                        json.dump(disk_cfg, f, indent=2)
+                    logger.info(f"Saved device={device} to config.json")
+                except Exception as e:
+                    logger.warning(f"Could not save device to config.json: {e}")
 
         daemon = TalkDaemon(cfg)
         daemon.run()
@@ -273,8 +301,12 @@ def main():
                 if hasattr(subprocess, "CREATE_NO_WINDOW")
                 else 0,
             )
-            time.sleep(1.0)
-            resp = send_command(cmd)
+            # Poll until daemon is ready (up to 5 seconds)
+            for _ in range(25):
+                time.sleep(0.2)
+                resp = send_command(cmd)
+                if resp != "DAEMON_NOT_RUNNING":
+                    break
         print(f"{cmd}: {resp}")
     else:
         print(__doc__)

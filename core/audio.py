@@ -120,7 +120,7 @@ class AudioRecorder:
         arr = indata.flatten()
         with self._lock:
             self._frames.append(arr.tobytes())
-            max_val = int(np.max(np.abs(arr))) if len(arr) > 0 else 0
+            max_val = int(np.max(np.abs(arr.astype(np.int32)))) if len(arr) > 0 else 0
             if max_val > self._peak:
                 self._peak = max_val
 
@@ -132,17 +132,22 @@ class AudioRecorder:
         with self._lock:
             self._frames.clear()
             self._peak = 0
-            self._is_recording = True
 
-        self._stream = sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=self.channels,
-            dtype="int16",
-            device=self.device,
-            callback=self._audio_callback,
-            blocksize=640,  # 40ms fragments at 16kHz
-        )
-        self._stream.start()
+        try:
+            self._stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype="int16",
+                device=self.device,
+                callback=self._audio_callback,
+                blocksize=640,  # 40ms fragments at 16kHz
+            )
+            self._stream.start()
+        except Exception:
+            self._stream = None
+            raise
+
+        self._is_recording = True
 
     def get_peak_level(self):
         """

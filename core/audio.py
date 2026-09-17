@@ -10,10 +10,34 @@ import numpy as np
 import sounddevice as sd
 
 
+def _hostapi_name(hostapi_index):
+    """Return a short human-readable name for a PortAudio host API."""
+    try:
+        api = sd.query_hostapis(hostapi_index)
+        name = api.get("name", "")
+        # Shorten common Windows API names for the menu
+        for short, pattern in [
+            ("WASAPI", "WASAPI"),
+            ("MME", "MME"),
+            ("DS", "DirectSound"),
+            ("WDM-KS", "WDM-KS"),
+            ("ASIO", "ASIO"),
+        ]:
+            if pattern in name:
+                return short
+        return name
+    except Exception:
+        return "?"
+
+
 def choose_microphone():
     """
     Display available input devices and prompt the user to select one.
     Returns the sounddevice device index (int) or None to use the system default.
+
+    Lists devices from *all* host APIs (WASAPI, MME, DirectSound, etc.) so
+    that RDP "Remote Audio" devices — which often only appear under MME or
+    DirectSound — are visible and selectable.
     """
     devices = sd.query_devices()
     input_devices = []
@@ -33,16 +57,17 @@ def choose_microphone():
     except Exception:
         default_input = None
 
-    print("\n──────────────────────────────────────")
+    print("\n──────────────────────────────────────────────────")
     print("  Available microphones")
-    print("──────────────────────────────────────")
+    print("──────────────────────────────────────────────────")
     for menu_num, (dev_idx, dev) in enumerate(input_devices, start=1):
         marker = " *" if dev_idx == default_input else ""
         label = dev["name"]
+        api = _hostapi_name(dev.get("hostapi", -1))
         ch = dev["max_input_channels"]
         rate = int(dev["default_samplerate"])
-        print(f"  {menu_num}) {label}  ({ch}ch, {rate} Hz){marker}")
-    print("──────────────────────────────────────")
+        print(f"  {menu_num}) [{api}] {label}  ({ch}ch, {rate} Hz){marker}")
+    print("──────────────────────────────────────────────────")
     if default_input is not None:
         print("  * = current system default")
     print(f"  Press Enter for default, or type 1–{len(input_devices)}")
@@ -62,7 +87,8 @@ def choose_microphone():
             num = int(choice)
             if 1 <= num <= len(input_devices):
                 dev_idx, dev = input_devices[num - 1]
-                print(f"  → Selected: {dev['name']}\n")
+                api = _hostapi_name(dev.get("hostapi", -1))
+                print(f"  → Selected: {dev['name']} [{api}]\n")
                 return dev_idx
         except ValueError:
             pass

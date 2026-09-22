@@ -4,10 +4,13 @@ Captures 16-bit signed LE mono audio at 16000 Hz on a dedicated thread.
 Provides live peak levels to the visualizer and finalizes to WAV bytes on stop.
 """
 import io
+import logging
 import threading
 import wave
 import numpy as np
 import sounddevice as sd
+
+logger = logging.getLogger("sdl2stt")
 
 
 def _hostapi_name(hostapi_index):
@@ -96,11 +99,37 @@ def choose_microphone():
         print(f"  Invalid choice. Enter 1–{len(input_devices)} or press Enter for default.")
 
 
+def _validate_input_device(device):
+    """
+    Check that a configured device index is actually an input device.
+
+    config.json holds a sounddevice index, but the picker menu numbers its
+    entries 1..N over input devices only — so a hand-edited value easily lands
+    on an output device, where InputStream fails with a bare
+    "Invalid number of channels [PaErrorCode -9998]" on every recording.
+    Fail loudly once here and fall back to the system default instead.
+    """
+    if device is None:
+        return None
+    try:
+        info = sd.query_devices(device)
+    except Exception as e:
+        logger.error(f"Configured device {device!r} not found ({e}) — using system default.")
+        return None
+    if info["max_input_channels"] < 1:
+        logger.error(
+            f"Configured device {device} ({info['name']}) has no input channels "
+            "— using system default. Run `talk daemon` from a terminal to re-pick a microphone."
+        )
+        return None
+    return device
+
+
 class AudioRecorder:
     def __init__(self, sample_rate=16000, channels=1, device=None):
         self.sample_rate = sample_rate
         self.channels = channels
-        self.device = device
+        self.device = _validate_input_device(device)
         self._lock = threading.Lock()
         self._stream = None
         self._frames = []

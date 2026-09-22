@@ -2,7 +2,7 @@
 talk — Push-to-talk voice input for Windows: record -> STT -> type transcript into focused field.
 
 Usage:
-  talk daemon     Run the background hotkey daemon (Ctrl+Space push-to-talk)
+  talk daemon     Run the background hotkey daemon (Win+Space push-to-talk)
   talk start      Begin recording
   talk stop       Stop, transcribe, and inject text
   talk toggle     Toggle recording on / off
@@ -78,7 +78,7 @@ def load_config():
     defaults = {
         "stt_url": "http://127.0.0.1:5000/v1/audio/transcriptions",
         "stt_peer": "",
-        "hotkey": "ctrl+space",
+        "hotkey": "super+space",
         "mode": "hold",
         "gate": 0.02,
         "min_loud_windows": 3,
@@ -127,7 +127,7 @@ class TalkDaemon:
             peer_name=config.get("stt_peer", ""),
         )
         self.hotkey_listener = HotkeyListener(
-            hotkey=config.get("hotkey", "ctrl+space"),
+            hotkey=config.get("hotkey", "super+space"),
             mode=config.get("mode", "hold"),
             on_start=self.start_recording,
             on_stop=self.stop_recording,
@@ -246,7 +246,7 @@ class TalkDaemon:
         logger.info("Initializing sdl2stt-win visualizer and audio system...")
         self.visualizer.start()
         self.hotkey_listener.start()
-        logger.info("sdl2stt-win daemon is running! Press Ctrl+Space to push-to-talk.")
+        logger.info(f"sdl2stt-win daemon is running! Press {self.hotkey_listener.hotkey} to push-to-talk.")
         try:
             self.ipc_server.start()
         except KeyboardInterrupt:

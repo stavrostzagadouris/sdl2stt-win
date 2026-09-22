@@ -9,7 +9,7 @@ NOTE that there is no security build into cleanTTS or these companions, they run
 
 Push-to-talk voice input for **Windows**, designed to pair with [cleanTTS](https://github.com/stavrostzagadouris/cleanTTS).
 
-Hold **Ctrl+Space**, speak, release — the transcribed text is typed directly into whatever window/field currently has focus.
+Hold **Win+Space**, speak, release — the transcribed text is typed directly into whatever window/field currently has focus.
 
 Windows port of `sdl2tts` with exact visual styling, audio capture parameters, and noise gate behavior.
 
@@ -18,8 +18,8 @@ Windows port of `sdl2tts` with exact visual styling, audio capture parameters, a
 ## Features
 
 - **Push-to-Talk (Hold-to-Talk) & Toggle**:
-  - Hold **`Ctrl+Space`**, speak, and release to instantly transcribe and type.
-  - Or switch to toggle mode in `config.json` (press `Ctrl+Space` once to start, press again to stop).
+  - Hold **`Win+Space`**, speak, and release to instantly transcribe and type.
+  - Or switch to toggle mode in `config.json` (press `Win+Space` once to start, press again to stop).
 - **cleanTTS Companion**:
   - Matches the exact dark pill visualizer styling (`#171a21` background, `#2a2f3a` border, `#5ea1ff` accent, 16 level-meter bars with smooth peak decay trail).
   - Pinned bottom-center of your focused monitor (above the taskbar).
@@ -77,9 +77,9 @@ Windows port of `sdl2tts` with exact visual styling, audio capture parameters, a
 
 4. **Use it**:
    - Focus any text field (browser address bar, chat, editor, etc.).
-   - Hold **`Ctrl+Space`**.
+   - Hold **`Win+Space`**.
    - Speak your sentence.
-   - Release **`Ctrl+Space`**.
+   - Release **`Win+Space`**.
    - The text appears in your field!
 
 ---
@@ -90,7 +90,7 @@ You can control `sdl2stt-win` from the command line, PowerShell, or external too
 
 | Command | Action |
 |---|---|
-| `talk daemon` | Start the resident background listener for `Ctrl+Space` |
+| `talk daemon` | Start the resident background listener for `Win+Space` |
 | `talk start` | Begin recording audio and show the visualizer |
 | `talk stop` | Stop recording, transcribe, and inject text |
 | `talk toggle` | Start if idle, stop if recording |
@@ -109,7 +109,7 @@ Settings can be specified in `.env` (recommended, gitignored) or `config.json`:
 {
   "stt_url": "http://127.0.0.1:5000/v1/audio/transcriptions",
   "stt_peer": "",
-  "hotkey": "ctrl+space",
+  "hotkey": "super+space",
   "mode": "hold",
   "gate": 0.02,
   "min_loud_windows": 3,

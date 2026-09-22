@@ -10,9 +10,28 @@ import keyboard
 
 logger = logging.getLogger("sdl2stt")
 
+# The `keyboard` library reports modifiers as "left ctrl", "windows", etc.
+# Map the names people type in config.json onto those canonical forms.
+MODIFIER_ALIASES = {
+    "ctrl": "ctrl",
+    "control": "ctrl",
+    "alt": "alt",
+    "shift": "shift",
+    "win": "windows",
+    "windows": "windows",
+    "super": "windows",
+    "meta": "windows",
+    "cmd": "windows",
+}
+
+
+def _canonical(part: str) -> str:
+    part = part.strip().lower()
+    return MODIFIER_ALIASES.get(part, part)
+
 
 class HotkeyListener:
-    def __init__(self, hotkey: str = "ctrl+space", mode: str = "hold", on_start=None, on_stop=None, on_toggle=None):
+    def __init__(self, hotkey: str = "win+space", mode: str = "hold", on_start=None, on_stop=None, on_toggle=None):
         self.hotkey = hotkey.lower()
         self.mode = mode.lower()  # 'hold' or 'toggle'
         self.on_start = on_start
@@ -22,10 +41,10 @@ class HotkeyListener:
         self._recording = False
         self._lock = threading.Lock()
         
-        self._hotkey_parts = [p.strip() for p in self.hotkey.split('+')]
+        self._hotkey_parts = [_canonical(p) for p in self.hotkey.split("+")]
         self._keys_down = {part: False for part in self._hotkey_parts}
         self._was_all_down = False
-        self._modifiers = {"ctrl", "alt", "shift", "win", "windows", "meta", "cmd"}
+        self._modifiers = set(MODIFIER_ALIASES.values())
         
         self._queue = queue.Queue()
         self._worker_thread = None

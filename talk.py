@@ -160,7 +160,6 @@ class TalkDaemon:
             logger.info("Recording started")
             self.recorder.start()
             self.visualizer.show()
-            self.hotkey_listener.set_recording(True)
             self.play_sound("start")
             return "RECORDING_STARTED"
 
@@ -171,7 +170,6 @@ class TalkDaemon:
             logger.info("Recording stopped, processing...")
             self.visualizer.hide()
             wav_bytes = self.recorder.stop()
-            self.hotkey_listener.set_recording(False)
             self.play_sound("stop")
 
         # Process audio asynchronously so we don't hold the lock or block IPC

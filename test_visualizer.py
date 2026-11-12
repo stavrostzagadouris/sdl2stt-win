@@ -25,6 +25,10 @@ while time.time() - start < 4.0:
     level = abs(math.sin(t)) * 0.7
     time.sleep(0.03)
 
+print("Now the processing animation (a group of bars sweeping side to side) for 3 seconds.")
+v.show_processing()
+time.sleep(3.0)
+
 v.hide()
 v.stop()
 print("Test completed successfully! The visualizer should have appeared at bottom-center.")

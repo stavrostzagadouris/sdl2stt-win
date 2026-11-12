@@ -8,17 +8,21 @@ Usage:
   talk toggle     Toggle recording on / off
   talk status     Check daemon status
   talk exit       Stop the background daemon
+  talk install-startup    Start the daemon automatically when you log in
+  talk uninstall-startup  Remove the automatic start
 """
 import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import json
 import logging
+import logging.handlers
 import subprocess
 import sys
 import threading
 import time
 import winsound
 
+from core import startup
 from core.audio import AudioRecorder, choose_microphone
 from core.hotkey import HotkeyListener
 from core.injector import inject_text
@@ -34,7 +38,11 @@ LOG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", BASE_DIR), "sdl2stt")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "talk.log")
 
-handlers = [logging.FileHandler(LOG_FILE, encoding="utf-8")]
+handlers = [
+    logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+    )
+]
 if sys.stdout is not None:
     handlers.append(logging.StreamHandler(sys.stdout))
 
@@ -85,6 +93,8 @@ def load_config():
         "sample_rate": 16000,
         "channels": 1,
         "play_sound_cues": False,
+        "max_seconds": 120,        # a recording is stopped automatically after this long
+        "log_transcripts": False,  # write dictated text to talk.log
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -137,6 +147,26 @@ class TalkDaemon:
         self._action_lock = threading.Lock()
         self._inject_lock = threading.Lock()  # serialize text injections
         self._sound_cues = config.get("play_sound_cues", True)
+        self._max_seconds = float(config.get("max_seconds", 120))
+        self._max_timer = None
+        self._viz_lock = threading.Lock()
+        self._pending = 0  # recordings stopped but not yet fully processed
+
+    def _refresh_visualizer(self, pending_delta: int = 0):
+        """Level meter while recording, sweep while transcribing, hidden otherwise."""
+        with self._viz_lock:
+            self._pending += pending_delta
+            if self.recorder.is_recording:
+                self.visualizer.show()
+            elif self._pending > 0:
+                self.visualizer.show_processing()
+            else:
+                self.visualizer.hide()
+
+    def _on_max_seconds(self, timer):
+        if timer is self._max_timer and self.recorder.is_recording:
+            logger.warning(f"Recording hit the {self._max_seconds:.0f}s limit, stopping")
+            self.stop_recording()
 
     def play_sound(self, tone: str):
         if not self._sound_cues:
@@ -159,7 +189,11 @@ class TalkDaemon:
                 return "ALREADY_RECORDING"
             logger.info("Recording started")
             self.recorder.start()
-            self.visualizer.show()
+            self._refresh_visualizer()
+            timer = threading.Timer(self._max_seconds, lambda: self._on_max_seconds(timer))
+            timer.daemon = True
+            self._max_timer = timer
+            timer.start()
             self.play_sound("start")
             return "RECORDING_STARTED"
 
@@ -168,13 +202,16 @@ class TalkDaemon:
             if not self.recorder.is_recording:
                 return "NOT_RECORDING"
             logger.info("Recording stopped, processing...")
-            self.visualizer.hide()
+            if self._max_timer is not None:
+                self._max_timer.cancel()
+                self._max_timer = None
             wav_bytes = self.recorder.stop()
+            self._refresh_visualizer(pending_delta=1)
             self.play_sound("stop")
 
         # Process audio asynchronously so we don't hold the lock or block IPC
         threading.Thread(
-            target=self._process_recording, args=(wav_bytes,), daemon=True
+            target=self._process_and_refresh, args=(wav_bytes,), daemon=True
         ).start()
         return "PROCESSING"
 
@@ -183,6 +220,12 @@ class TalkDaemon:
             return self.stop_recording()
         else:
             return self.start_recording()
+
+    def _process_and_refresh(self, wav_bytes: bytes):
+        try:
+            self._process_recording(wav_bytes)
+        finally:
+            self._refresh_visualizer(pending_delta=-1)
 
     def _process_recording(self, wav_bytes: bytes):
         if not wav_bytes:
@@ -210,7 +253,8 @@ class TalkDaemon:
             logger.info(f"POSTing audio to STT: {self.stt_client.endpoint_url}")
             text = self.stt_client.transcribe(wav_bytes)
             elapsed = time.time() - t0
-            logger.info(f"STT Response ({elapsed:.2f}s): {text!r}")
+            shown = repr(text) if self.config.get("log_transcripts") else f"{len(text)} characters"
+            logger.info(f"STT Response ({elapsed:.2f}s): {shown}")
         except Exception as e:
             logger.error(f"STT error: {e}")
             self.play_sound("error")
@@ -306,6 +350,16 @@ def main():
                 if resp != "DAEMON_NOT_RUNNING":
                     break
         print(f"{cmd}: {resp}")
+    elif cmd == "install-startup":
+        try:
+            lnk = startup.install(os.path.abspath(__file__))
+        except subprocess.CalledProcessError as e:
+            print(f"Could not create the startup shortcut: {e.stderr.decode(errors='replace').strip()}")
+            sys.exit(1)
+        print(f"Created {lnk}")
+        print("The daemon will start silently at your next login.")
+    elif cmd == "uninstall-startup":
+        print("Startup shortcut removed." if startup.uninstall() else "No startup shortcut found.")
     else:
         print(__doc__)
 

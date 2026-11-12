@@ -96,6 +96,8 @@ You can control `sdl2stt-win` from the command line, PowerShell, or external too
 | `talk toggle` | Start if idle, stop if recording |
 | `talk status` | Check if currently `RECORDING` or `IDLE` |
 | `talk exit` | Terminate the background daemon |
+| `talk install-startup` | Start the daemon silently at every login |
+| `talk uninstall-startup` | Remove the automatic start |
 
 Add the folder containing `talk.bat` to your Windows `PATH` to run `talk` from any prompt or launcher.
 
@@ -150,5 +152,7 @@ Logs are written to:
 ```
 Each recording logs:
 - Peak RMS and loud-window count (to verify the noise gate).
-- STT request duration and response text.
+- STT request duration and transcript length. The text itself is only logged with `"log_transcripts": true` in `config.json`.
+
+The log rotates at 1 MB (three old files are kept). A recording is stopped automatically after `"max_seconds"` (default 120).
 - Connection errors or diagnostic notices if the server cannot be reached.

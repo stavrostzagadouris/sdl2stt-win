@@ -32,6 +32,7 @@ C_LIT = (94, 161, 255)      # #5ea1ff
 BAR_W = 280
 BAR_H = 48
 NBARS = 16
+SWEEP_BARS = 3  # width of the moving group in the processing animation
 BAR_MARG = 24
 
 # Win32 Constants
@@ -123,6 +124,7 @@ class VisualizerBar:
         self.bar_height = bar_height
         self.bar_margin_bottom = bar_margin_bottom
         self._visible = False
+        self._processing = False
         self._running = False
         self._thread = None
         self._screen = None
@@ -145,6 +147,18 @@ class VisualizerBar:
             return
 
         self._level = 0.0
+        self._processing = False
+        self._present()
+
+    def show_processing(self):
+        """Switches the bar to a sweeping "working on it" animation, showing it if hidden."""
+        if not self._running or not self._hwnd:
+            return
+        self._processing = True
+        if not self._visible:
+            self._present()
+
+    def _present(self):
         self._visible = True
 
         left, top, right, bottom = get_current_monitor_work_area()
@@ -168,6 +182,7 @@ class VisualizerBar:
         if not self._running or not self._hwnd:
             return
         self._visible = False
+        self._processing = False
         user32.ShowWindow(self._hwnd, SW_HIDE)
 
     def stop(self):
@@ -177,7 +192,12 @@ class VisualizerBar:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
 
-    def _draw_frame(self, lit_bars: int):
+    def _draw_frame(self, lit_bars: int, sweep_pos: int = None):
+        """
+        lit_bars: how many bars are lit from the left (level meter).
+        sweep_pos: if given, draw the processing animation instead: a group of
+        SWEEP_BARS lit bars starting at this index, with the dot dimmed.
+        """
         self._screen.fill(C_BG)
 
         # Border
@@ -186,7 +206,8 @@ class VisualizerBar:
         # Left active dot (10x10)
         dot_size = 10
         dot_y = (self.bar_height - dot_size) // 2
-        pygame.draw.rect(self._screen, C_LIT, (16, dot_y, dot_size, dot_size))
+        dot_color = C_LIT if sweep_pos is None else C_DIM
+        pygame.draw.rect(self._screen, dot_color, (16, dot_y, dot_size, dot_size))
 
         # 16 level bars
         bar_x0 = 44
@@ -196,7 +217,11 @@ class VisualizerBar:
         bar_y = (self.bar_height - bar_h) // 2
 
         for b in range(NBARS):
-            color = C_LIT if b < lit_bars else C_DIM
+            if sweep_pos is None:
+                lit = b < lit_bars
+            else:
+                lit = sweep_pos <= b < sweep_pos + SWEEP_BARS
+            color = C_LIT if lit else C_DIM
             x = bar_x0 + b * bar_step
             pygame.draw.rect(self._screen, color, (x, bar_y, bar_w, bar_h))
 
@@ -248,7 +273,13 @@ class VisualizerBar:
                         self._running = False
                         break
 
-                if self._visible:
+                if self._visible and self._processing:
+                    # Lit group bounces left-right-left, one full pass in about 0.9s.
+                    span = NBARS - SWEEP_BARS
+                    step = int(time.monotonic() * 15) % (2 * span)
+                    self._draw_frame(0, sweep_pos=step if step <= span else 2 * span - step)
+                    pygame.display.flip()
+                elif self._visible:
                     current_peak = self.get_level_fn()
                     if current_peak > 0.001:
                         target_lvl = min(1.0, math.sqrt(current_peak * 2.5))
